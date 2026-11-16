@@ -355,3 +355,8 @@ app.use((err, req, res, next) => {
 });
 
 const SEED_PATIENTS = { JD: ['Juan', 'Dela Cruz'], MJ: ['Maria', 'Juana'], RP: ['Ramon', 'Perez'], LS: ['Liza', 'Santos'], AC: ['Antonio', 'Cruz'] };
+console.log('--- ENVIRONMENT DIAGNOSTICS ---');
+console.log('MONGODB_URI is set:', !!process.env.MONGODB_URI);
+console.log('MONGODB_DB_NAME:', process.env.MONGODB_DB_NAME || 'NOT SET');
+console.log('PORT:', process.env.PORT || 'NOT SET');
+console.log('--------------------------------');
