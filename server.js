@@ -33,7 +33,7 @@ const verify = (p, st) => {
   const a = crypto.pbkdf2Sync(p, Buffer.from(s, 'base64'), 100000, 32, 'sha256'), b = Buffer.from(h, 'base64');
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 };
-function need(req, ...roles) { // 401 = not signed in, 403 = role not allowed
+function need(req, ...roles) {
   const h = req.headers.authorization || '';
   const s = h.startsWith('Bearer ') ? sessions.get(h.slice(7).trim()) : null;
   if (!s || s.expires < Date.now()) fail(401, 'Please sign in again.');
@@ -50,7 +50,6 @@ function validateSlot(start, dur, pr) {
   if (!PRI.includes(pr)) fail(400, 'Priority must be Elective, Urgent, or Emergency.');
 }
 
-// Throws HTTP 409 naming the overlapping room, staff member, or equipment.
 async function checkConflicts(room, date, start, dur, priority, team, eq, excludeId) {
   const end = start + dur;
   if (end > 1440) fail(400, 'A procedure must end before midnight.');
@@ -78,7 +77,6 @@ async function checkConflicts(room, date, start, dur, priority, team, eq, exclud
   }
 }
 
-// Open slots = operating windows minus maintenance/blocked periods and booked procedures.
 function openSlots(room, av, booked) {
   if (room.status !== 'Active') return [];
   let windows = av.filter(a => a.availabilityType === 'Available').map(a => [mins(a.startTime), mins(a.endTime)]);
@@ -142,7 +140,7 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 const get = (p, fn) => app.get(p, wrap(fn)), post = (p, fn) => app.post(p, wrap(fn)), put = (p, fn) => app.put(p, wrap(fn)), del = (p, fn) => app.delete(p, wrap(fn));
-const dropSessions = id => { for (const [tk, s] of sessions) if (String(s.userId) === String(id)) sessions.delete(tk); }; // forces re-login
+const dropSessions = id => { for (const [tk, s] of sessions) if (String(s.userId) === String(id)) sessions.delete(tk); };
 
 get('/api/health', async (req, res) => {
   let ok = true; try { await db.command({ ping: 1 }); } catch { ok = false; }
@@ -160,7 +158,6 @@ post('/api/auth/login', async (req, res) => {
   res.json({ token, role: u.role, fullName: u.fullName, username: u.username });
 });
 
-// ---- rooms / availability / reference data ----
 get('/api/rooms', async (req, res) => {
   need(req); const d = pDate(req.query.date || todayStr());
   const [rooms, av, sch] = await Promise.all([C.rooms.find().sort({ roomCode: 1 }).toArray(), C.avail.find({ date: d }).toArray(),
@@ -191,7 +188,6 @@ get('/api/staff', async (req, res) => {
   res.json(l.map(x => ({ id: String(x._id), fullName: x.fullName, username: x.username })));
 });
 
-// ---- patients ----
 const initKey = s => String(s || '').replace(/[^A-Za-z]/g, '').toUpperCase();
 async function newPatient(p, createdBy) {
   const first = p.firstName.trim(), last = p.lastName.trim(), n = (await C.patients.countDocuments()) + 1;
@@ -214,7 +210,6 @@ post('/api/patients', async (req, res) => {
   res.json({ id: String(p._id), patientCode: p.patientCode, message: `Patient ${p.fullName} saved (${p.patientCode}).` });
 });
 
-// ---- cases (every case is linked to a patient record) ----
 post('/api/cases', async (req, res) => {
   const u = need(req, 'Scheduler', 'Administrator'), r = req.body || {};
   if (blank(r.caseRef)) fail(400, 'Case reference is required.');
@@ -233,7 +228,6 @@ get('/api/cases', async (req, res) => {
   res.json(l.map(x => { const p = pats.get(String(x.patientId)) || {}; return { id: String(x._id), caseRef: x.caseRef, patientId: x.patientId ? String(x.patientId) : null, patientName: p.fullName, patientCode: p.patientCode, patientAlias: x.patientAlias, age: x.age, procedureName: x.procedureName, diagnosis: x.diagnosis, urgency: x.urgency, createdAt: x.createdAt }; }));
 });
 
-// ---- schedules ----
 get('/api/schedules', async (req, res) => {
   need(req); const d = pDate(req.query.date || todayStr());
   res.json(await views(await C.sched.find({ scheduledDate: d }).toArray()));
@@ -282,7 +276,6 @@ put('/api/schedules/:id', async (req, res) => {
   res.json({ id: String(s._id), scheduleId: s.scheduleCode, caseRef: cs?.caseRef, room: room.roomCode, status: s.status, message: `Schedule ${s.scheduleCode} updated: ${s.status}.` });
 });
 
-// ---- administrator ----
 get('/api/admin/records', async (req, res) => {
   const u = need(req, 'Administrator'), d = pDate(req.query.date || todayStr());
   if (req.query.review === '1') await audit(u, 'Review', 'surgical_schedules', null, 'Reviewed admin records', req);
@@ -318,7 +311,6 @@ post('/api/admin/users', async (req, res) => {
   res.json({ id: String(ins.insertedId), message: `Account ${r.username.trim()} created.` });
 });
 
-// Administrator: manage any account (edit name/role/status, reset password) - sessions of changed accounts are ended.
 put('/api/admin/users/:id', async (req, res) => {
   const me = need(req, 'Administrator'), r = req.body || {}, o = oid(req.params.id);
   const u = o && await C.users.findOne({ _id: o }); if (!u) fail(404, 'Account not found.');
@@ -351,11 +343,15 @@ del('/api/admin/users/:id', async (req, res) => {
   res.json({ message: `Account ${u.username} deleted.` });
 });
 
-// ---------------- errors ----------------
 app.use('/api', (req, res) => res.status(404).json({ message: 'API route not found.' }));
-app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+app.use((err, req, res, next) => { 
   let code = 500, msg = 'Unexpected server error. Please try again or contact the administrator.';
   if (err instanceof ApiError) { code = err.code; msg = err.message; }
   else if (err.type === 'entity.parse.failed') { code = 400; msg = 'Invalid or missing request information.'; }
   else if (err.code === 11000) { code = 409; msg = 'A record with the same unique reference already exists.'; }
-  else if (/^Mongo/.test(err.name || '')) { code = 503; msg = 'The database is unavailable. Check the MongoDB service and /api/health
+  else if (/^Mongo/.test(err.name || '')) { code = 503; msg = 'The database is unavailable. Check the MongoDB service and /api/health.'; console.error(err); }
+  else console.error(err);
+  res.status(code).json({ message: msg });
+});
+
+const SEED_PATIENTS = { JD: ['Juan', 'Dela Cruz'], MJ: ['Maria', 'Juana'], RP: ['Ramon', 'Perez'], LS: ['Liza', 'Santos'], AC: ['Antonio', 'Cruz'] };
