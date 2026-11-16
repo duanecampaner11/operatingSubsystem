@@ -1,0 +1,9 @@
+{
+  "name": "surgischedule-or",
+  "version": "1.0.0",
+  "description": "Operating Room & Surgical Scheduling System (subsystem of the Integrated HIS)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "dev": "node --watch server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "express": "^4.19.2", "mongodb": "^6.8.0" }
+}
