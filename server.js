@@ -1,6 +1,8 @@
 'use strict';
 const express = require('express'), path = require('path'), crypto = require('crypto');
 const { MongoClient, ObjectId } = require('mongodb');
+// Fix for Render DNS timeouts with MongoDB Atlas
+require('dns').setServers(['8.8.8.8', '1.1.1.1']);
 
 const PORT = process.env.PORT || 5050;
 const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
@@ -9,6 +11,7 @@ const DBN = process.env.MONGODB_DB_NAME || 'medilink_lab_dev';
 class ApiError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 const fail = (c, m) => { throw new ApiError(c, m); };
 const C = {}; // collections
+
 
 // ---------------- constants & helpers ----------------
 const PRI = ['Elective', 'Urgent', 'Emergency'], TROLES = ['Surgeon', 'Anesthesiologist', 'Nurse'], ATYPES = ['Available', 'Maintenance', 'Blocked'];
