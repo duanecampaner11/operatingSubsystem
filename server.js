@@ -3,8 +3,8 @@ const express = require('express'), path = require('path'), crypto = require('cr
 const { MongoClient, ObjectId } = require('mongodb');
 
 const PORT = process.env.PORT || 5050;
-const URI = process.env.MONGODB_URI || process.env.OR_MONGO_URI || 'mongodb://127.0.0.1:27017';
-const DBN = process.env.MONGODB_DB_NAME || process.env.OR_MONGO_DB || 'medilink_lab_dev';
+const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
+const DBN = process.env.MONGODB_DB_NAME || 'medilink_lab_dev';
 
 class ApiError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 const fail = (c, m) => { throw new ApiError(c, m); };
@@ -12,7 +12,7 @@ const C = {}; // collections
 
 // ---------------- constants & helpers ----------------
 const PRI = ['Elective', 'Urgent', 'Emergency'], TROLES = ['Surgeon', 'Anesthesiologist', 'Nurse'], ATYPES = ['Available', 'Maintenance', 'Blocked'];
-const OPEN_FROM = 7 * 60, OPEN_TO = 19 * 60; // default OR hours 07:00-19:00
+const OPEN_FROM = 7 * 60, OPEN_TO = 19 * 60; 
 const INV = { 'C-Arm Imaging': 1, 'Laparoscopic Tower': 2, 'Anesthesia Machine': 3, 'Surgical Microscope': 1, 'Electrosurgical Unit': 3, 'Defibrillator': 2 };
 const validTime = t => typeof t === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
 const mins = t => { const [h, m] = t.split(':'); return +h * 60 + +m; };
@@ -26,14 +26,14 @@ const blank = s => typeof s !== 'string' || !s.trim();
 const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
 
 // ---------------- auth ----------------
-const sessions = new Map(); // token -> session (in memory, cleared on restart)
+const sessions = new Map(); 
 const hash = p => { const s = crypto.randomBytes(16); return s.toString('base64') + '$' + crypto.pbkdf2Sync(p, s, 100000, 32, 'sha256').toString('base64'); };
 const verify = (p, st) => {
   const [s, h] = String(st).split('$'); if (!h) return false;
   const a = crypto.pbkdf2Sync(p, Buffer.from(s, 'base64'), 100000, 32, 'sha256'), b = Buffer.from(h, 'base64');
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 };
-function need(req, ...roles) {
+function need(req, ...roles) { 
   const h = req.headers.authorization || '';
   const s = h.startsWith('Bearer ') ? sessions.get(h.slice(7).trim()) : null;
   if (!s || s.expires < Date.now()) fail(401, 'Please sign in again.');
@@ -140,7 +140,7 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 const get = (p, fn) => app.get(p, wrap(fn)), post = (p, fn) => app.post(p, wrap(fn)), put = (p, fn) => app.put(p, wrap(fn)), del = (p, fn) => app.delete(p, wrap(fn));
-const dropSessions = id => { for (const [tk, s] of sessions) if (String(s.userId) === String(id)) sessions.delete(tk); };
+const dropSessions = id => { for (const [tk, s] of sessions) if (String(s.userId) === String(id)) sessions.delete(tk); }; 
 
 get('/api/health', async (req, res) => {
   let ok = true; try { await db.command({ ping: 1 }); } catch { ok = false; }
@@ -353,10 +353,3 @@ app.use((err, req, res, next) => {
   else console.error(err);
   res.status(code).json({ message: msg });
 });
-
-const SEED_PATIENTS = { JD: ['Juan', 'Dela Cruz'], MJ: ['Maria', 'Juana'], RP: ['Ramon', 'Perez'], LS: ['Liza', 'Santos'], AC: ['Antonio', 'Cruz'] };
-console.log('--- ENVIRONMENT DIAGNOSTICS ---');
-console.log('MONGODB_URI is set:', !!process.env.MONGODB_URI);
-console.log('MONGODB_DB_NAME:', process.env.MONGODB_DB_NAME || 'NOT SET');
-console.log('PORT:', process.env.PORT || 'NOT SET');
-console.log('--------------------------------');
