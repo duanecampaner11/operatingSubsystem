@@ -1,17 +1,26 @@
 'use strict';
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED REJECTION:', reason);
+  process.exit(1);
+});
+
 const express = require('express'), path = require('path'), crypto = require('crypto');
 const { MongoClient, ObjectId } = require('mongodb');
-// Fix for Render DNS timeouts with MongoDB Atlas
 require('dns').setServers(['8.8.8.8', '1.1.1.1']);
 
 const PORT = process.env.PORT || 5050;
 const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const DBN = process.env.MONGODB_DB_NAME || 'medilink_lab_dev';
 
+let db;
+const C = {};
+
 class ApiError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 const fail = (c, m) => { throw new ApiError(c, m); };
-const C = {}; // collections
-
 
 // ---------------- constants & helpers ----------------
 const PRI = ['Elective', 'Urgent', 'Emergency'], TROLES = ['Surgeon', 'Anesthesiologist', 'Nurse'], ATYPES = ['Available', 'Maintenance', 'Blocked'];
@@ -356,3 +365,41 @@ app.use((err, req, res, next) => {
   else console.error(err);
   res.status(code).json({ message: msg });
 });
+
+async function startServer() {
+  // 1. Start listening FIRST so Render detects the port immediately
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+
+  // 2. Connect to MongoDB AFTER the port is open
+  try {
+    console.log("Connecting to MongoDB...");
+    const client = new MongoClient(URI, { serverSelectionTimeoutMS: 5000 });
+    await client.connect();
+    db = client.db(DBN);
+
+    C.users = db.collection('users');
+    C.patients = db.collection('patients');
+    C.cases = db.collection('surgical_cases');
+    C.rooms = db.collection('rooms');
+    C.avail = db.collection('room_availability');
+    C.sched = db.collection('surgical_schedules');
+    C.audit = db.collection('audit_logs');
+
+    console.log("Successfully connected to MongoDB.");
+
+    process.on('SIGTERM', () => {
+      server.close(() => {
+        client.close(false).then(() => process.exit(0));
+      });
+    });
+
+  } catch (err) {
+    console.error("FATAL: Could not connect to MongoDB. Check your MONGODB_URI and Atlas Network Access settings.");
+    console.error(err);
+    process.exit(1); 
+  }
+}
+
+startServer();
