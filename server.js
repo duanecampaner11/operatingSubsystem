@@ -154,9 +154,28 @@ app.use(express.static(path.join(__dirname, 'public')));
 const get = (p, fn) => app.get(p, wrap(fn)), post = (p, fn) => app.post(p, wrap(fn)), put = (p, fn) => app.put(p, wrap(fn)), del = (p, fn) => app.delete(p, wrap(fn));
 const dropSessions = id => { for (const [tk, s] of sessions) if (String(s.userId) === String(id)) sessions.delete(tk); }; 
 
-get('/api/health', async (req, res) => {
-  let ok = true; try { await db.command({ ping: 1 }); } catch { ok = false; }
-  res.json({ status: 'ok', databaseConnected: ok, time: new Date() });
+// TEMPORARY SETUP ROUTE
+get('/api/setup-admin', async (req, res) => {
+  try {
+    const passwordHash = hash('Admin@123'); 
+    await C.users.updateOne(
+      { username: 'oradmin' },
+      { 
+        $set: { 
+          username: 'oradmin', 
+          passwordHash: passwordHash, 
+          fullName: 'System Administrator', 
+          role: 'Administrator', 
+          status: 'Active',
+          createdAt: new Date()
+        } 
+      },
+      { upsert: true } 
+    );
+    res.json({ message: 'Admin user created successfully!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 post('/api/auth/login', async (req, res) => {
